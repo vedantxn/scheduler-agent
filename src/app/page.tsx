@@ -1,103 +1,145 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import React, { useState, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+
+export default function SchedulePage() {
+  const [input, setInput] = useState('')
+  const [response, setResponse] = useState('')
+  const [tokens, setTokens] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  // Step 1: On mount, check if URL has ?code= from Google OAuth
+  useEffect(() => {
+    const code = searchParams.get('code')
+    if (code && !tokens) {
+      // Exchange code for tokens
+      fetch(`/api/auth/callback?code=${code}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) {
+            setError('OAuth failed: ' + data.error)
+          } else {
+            setTokens(data)
+            localStorage.setItem('googleTokens', JSON.stringify(data))
+            // Clean URL to remove code param
+            router.replace(window.location.pathname)
+          }
+        })
+        .catch(() => setError('OAuth exchange failed'))
+    } else {
+      // Try load tokens from localStorage on page load
+      const stored = localStorage.getItem('googleTokens')
+      if (stored) setTokens(JSON.parse(stored))
+    }
+  }, [searchParams, tokens, router])
+
+  // Step 2: On login button click, start OAuth flow
+  const loginWithGoogle = async () => {
+    setError('')
+    const res = await fetch('/api/auth/url')
+    const data = await res.json()
+    if (data.url) {
+      window.location.href = data.url
+    } else {
+      setError('Failed to get auth URL')
+    }
+  }
+
+  // Step 3: Send scheduling request with tokens + input
+  const sendSchedule = async () => {
+    setError('')
+    setResponse('')
+    if (!input) {
+      setError('Please enter event text')
+      return
+    }
+    if (!tokens) {
+      setError('Please login with Google first')
+      return
+    }
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input, tokens }),
+      })
+      const data = await res.json()
+      if (data.error) {
+        setError(data.error)
+      } else if (data.success) {
+        setResponse(
+          `Event created!\nTitle: ${data.event.summary}\nStart: ${data.event.start.dateTime}`
+        )
+      } else {
+        setError('Unknown error')
+      }
+    } catch (e) {
+      setError('Request failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Step 4: Simple logout clears tokens
+  const logout = () => {
+    setTokens(null)
+    localStorage.removeItem('googleTokens')
+    setResponse('')
+    setError('')
+  }
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="max-w-xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-4">Scheduling Assistant</h1>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      {!tokens ? (
+        <button
+          onClick={loginWithGoogle}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Login with Google
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={logout}
+            className="mb-4 text-sm underline text-red-600"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Logout
+          </button>
+
+          <textarea
+            placeholder="Type event description, e.g. 'Call Jack next Thursday at 3pm'"
+            className="w-full p-2 border rounded mb-2"
+            rows={4}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+
+          <button
+            onClick={sendSchedule}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            disabled={loading}
           >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+            {loading ? 'Sending...' : 'Send'}
+          </button>
+
+          {error && (
+            <p className="mt-4 text-red-600 whitespace-pre-wrap">{error}</p>
+          )}
+          {response && (
+            <pre className="mt-4 bg-gray-100 p-3 rounded whitespace-pre-wrap">
+              {response}
+            </pre>
+          )}
+        </>
+      )}
+    </main>
+  )
 }
