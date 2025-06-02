@@ -1,31 +1,38 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { calendar, setCredentials } from '@/app/lib/google'
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: "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",
+  apiKey: process.env.OPENROUTER_API_KEY!,
   defaultHeaders: {
-    'HTTP-Referer': 'https://yourdomain.com', // replace with your site
+    'HTTP-Referer': 'https://yourdomain.com',
     'X-Title': 'Safetos Schedule Assistant',
   },
 })
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { input, tokens } = await req.json()
-
+    const { input } = await req.json()
     if (!input) {
       return NextResponse.json({ error: 'Missing input' }, { status: 400 })
     }
-    if (!tokens) {
-      return NextResponse.json({ error: 'Missing Google OAuth tokens' }, { status: 400 })
+
+    // Read tokens from cookies
+    const access_token = req.cookies.get('access_token')?.value
+    const refresh_token = req.cookies.get('refresh_token')?.value
+
+    if (!access_token) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Inject today's date
-    const today = new Date().toISOString().split('T')[0]
+    // TODO: Add token refresh logic if expired here (later step)
 
-    // Build prompt for scheduling parsing
+    // Set credentials for Google API client
+    setCredentials({ access_token, refresh_token })
+
+    // Use OpenAI to parse input
+    const today = new Date().toISOString().split('T')[0]
     const prompt = `
 Today is ${today}.
 Parse the following text into a structured event with title and ISO datetime.
@@ -39,35 +46,24 @@ Return ONLY a JSON like:
 }
 `
 
-    // Call OpenRouter GPT model for parsing
     const completion = await openai.chat.completions.create({
-      model: "deepseek/deepseek-r1-0528-qwen3-8b:free",
+      model: 'deepseek/deepseek-r1-0528-qwen3-8b:free',
       messages: [
         {
           role: 'system',
           content: 'You are a smart scheduling assistant. Parse natural language into title + datetime in ISO format.',
         },
-        {
-          role: 'user',
-          content: prompt,
-        },
+        { role: 'user', content: prompt },
       ],
     })
 
     const message = completion.choices[0].message?.content || ''
     const parsed = JSON.parse(message.match(/\{[\s\S]*?\}/)?.[0] || '{}')
 
-    // Add event to Google Calendar
-    setCredentials(tokens)
-
     const eventBody = {
       summary: parsed.title,
-      start: {
-        dateTime: parsed.datetime,
-      },
-      end: {
-        dateTime: new Date(new Date(parsed.datetime).getTime() + 60 * 60 * 1000).toISOString(), // +1 hour
-      },
+      start: { dateTime: parsed.datetime },
+      end: { dateTime: new Date(new Date(parsed.datetime).getTime() + 60 * 60 * 1000).toISOString() },
     }
 
     const res = await calendar.events.insert({
@@ -75,10 +71,7 @@ Return ONLY a JSON like:
       requestBody: eventBody,
     })
 
-    return NextResponse.json({
-      success: true,
-      event: res.data,
-    })
+    return NextResponse.json({ success: true, event: res.data })
   } catch (err) {
     console.error('API error:', err)
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })

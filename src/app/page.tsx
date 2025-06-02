@@ -15,27 +15,15 @@ export default function SchedulePage() {
   // Step 1: On mount, check if URL has ?code= from Google OAuth
   useEffect(() => {
     const code = searchParams.get('code')
-    if (code && !tokens) {
-      // Exchange code for tokens
-      fetch(`/api/auth/callback?code=${code}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.error) {
-            setError('OAuth failed: ' + data.error)
-          } else {
-            setTokens(data)
-            localStorage.setItem('googleTokens', JSON.stringify(data))
-            // Clean URL to remove code param
-            router.replace(window.location.pathname)
-          }
-        })
-        .catch(() => setError('OAuth exchange failed'))
-    } else {
-      // Try load tokens from localStorage on page load
-      const stored = localStorage.getItem('googleTokens')
-      if (stored) setTokens(JSON.parse(stored))
+    if (code) {
+      // Just call the callback endpoint to set cookies, no tokens in response
+      fetch(`/api/auth/callback?code=${code}`).then(() => {
+        router.replace(window.location.pathname) // Clean URL
+        setTokens(true) // Simple boolean flag for "logged in"
+      }).catch(() => setError('OAuth exchange failed'))
     }
-  }, [searchParams, tokens, router])
+    // You can optionally check login status by calling an endpoint or assuming if cookie exists
+  }, [searchParams, router])
 
   // Step 2: On login button click, start OAuth flow
   async function loginWithGoogle() {
@@ -52,41 +40,33 @@ export default function SchedulePage() {
   
   // Step 3: Send scheduling request with tokens + input
   const sendSchedule = async () => {
+    if (!input) return setError('Please enter event text')
+    if (!tokens) return setError('Please login with Google first')
+  
+    setLoading(true)
     setError('')
     setResponse('')
-    if (!input) {
-      setError('Please enter event text')
-      return
-    }
-    if (!tokens) {
-      setError('Please login with Google first')
-      return
-    }
-    setLoading(true)
-
+  
     try {
       const res = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input, tokens }),
+        body: JSON.stringify({ input }),
       })
       const data = await res.json()
-      if (data.error) {
-        setError(data.error)
-      } else if (data.success) {
+      if (data.error) setError(data.error)
+      else if (data.success) {
         setResponse(
           `Event created!\nTitle: ${data.event.summary}\nStart: ${data.event.start.dateTime}`
         )
-      } else {
-        setError('Unknown error')
-      }
-    } catch (e) {
+      } else setError('Unknown error')
+    } catch {
       setError('Request failed')
     } finally {
       setLoading(false)
     }
   }
-
+  
   // Step 4: Simple logout clears tokens
   const logout = () => {
     setTokens(null)
