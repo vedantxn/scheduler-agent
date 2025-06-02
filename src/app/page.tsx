@@ -14,16 +14,16 @@ export default function SchedulePage() {
 
   // Step 1: On mount, check if URL has ?code= from Google OAuth
   useEffect(() => {
-    const code = searchParams.get('code')
-    if (code) {
-      // Just call the callback endpoint to set cookies, no tokens in response
-      fetch(`/api/auth/callback?code=${code}`).then(() => {
-        router.replace(window.location.pathname) // Clean URL
-        setTokens(true) // Simple boolean flag for "logged in"
-      }).catch(() => setError('OAuth exchange failed'))
+    async function checkSession() {
+      const res = await fetch('/api/auth/session')
+      const data = await res.json()
+      if (data.loggedIn) {
+        setTokens(true) // or a better user state to show logged-in UI
+      }
     }
-    // You can optionally check login status by calling an endpoint or assuming if cookie exists
-  }, [searchParams, router])
+    checkSession()
+  }, [])
+  
 
   // Step 2: On login button click, start OAuth flow
   async function loginWithGoogle() {
