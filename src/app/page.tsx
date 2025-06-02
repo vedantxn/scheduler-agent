@@ -1,7 +1,9 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Moon, Sun, LogIn, LogOut, Send } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function SchedulePage() {
   const [input, setInput] = useState('')
@@ -9,44 +11,38 @@ export default function SchedulePage() {
   const [tokens, setTokens] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [darkMode, setDarkMode] = useState(true)
   const searchParams = useSearchParams()
-  const router = useRouter()
 
-  // Step 1: On mount, check if URL has ?code= from Google OAuth
+  useEffect(() => {
+    const theme = localStorage.getItem('theme')
+    if (theme === 'light') setDarkMode(false)
+    document.documentElement.classList.toggle('dark', darkMode)
+  }, [darkMode])
+
   useEffect(() => {
     async function checkSession() {
       const res = await fetch('/api/auth/session')
       const data = await res.json()
-      if (data.loggedIn) {
-        setTokens(true) // or a better user state to show logged-in UI
-      }
+      if (data.loggedIn) setTokens(true)
     }
     checkSession()
   }, [])
-  
 
-  // Step 2: On login button click, start OAuth flow
-  async function loginWithGoogle() {
+  const loginWithGoogle = async () => {
     const res = await fetch('/api/auth/url')
-    if (!res.ok) {
-      console.error('Failed to get auth URL')
-      return
-    }
     const data = await res.json()
-    if (data.url) {
-      window.location.href = data.url
-    }
+    if (data.url) window.location.href = data.url
   }
-  
-  // Step 3: Send scheduling request with tokens + input
+
   const sendSchedule = async () => {
-    if (!input) return setError('Please enter event text')
-    if (!tokens) return setError('Please login with Google first')
-  
+    if (!input) return setError('⚠️ Please enter event text')
+    if (!tokens) return setError('⚠️ Please login with Google first')
+
     setLoading(true)
     setError('')
     setResponse('')
-  
+
     try {
       const res = await fetch('/api/schedule', {
         method: 'POST',
@@ -56,18 +52,15 @@ export default function SchedulePage() {
       const data = await res.json()
       if (data.error) setError(data.error)
       else if (data.success) {
-        setResponse(
-          `Event created!\nTitle: ${data.event.summary}\nStart: ${data.event.start.dateTime}`
-        )
-      } else setError('Unknown error')
+        setResponse(`✅ Event created!\n\n📅 ${data.event.summary}\n🕒 ${data.event.start.dateTime}`)
+      } else setError('❌ Unknown error')
     } catch {
-      setError('Request failed')
+      setError('❌ Request failed')
     } finally {
       setLoading(false)
     }
   }
-  
-  // Step 4: Simple logout clears tokens
+
   const logout = () => {
     setTokens(null)
     localStorage.removeItem('googleTokens')
@@ -75,52 +68,100 @@ export default function SchedulePage() {
     setError('')
   }
 
+  const toggleTheme = () => {
+    const newMode = !darkMode
+    setDarkMode(newMode)
+    localStorage.setItem('theme', newMode ? 'dark' : 'light')
+    document.documentElement.classList.toggle('dark', newMode)
+  }
+
   return (
-    <main className="max-w-xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Scheduling Assistant</h1>
-
-      {!tokens ? (
-        <button
-          onClick={loginWithGoogle}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Login with Google
-        </button>
-      ) : (
-        <>
-          <button
-            onClick={logout}
-            className="mb-4 text-sm underline text-red-600"
+    <main className="min-h-screen flex flex-col items-center justify-between p-6 bg-white dark:bg-zinc-900 transition-colors duration-300">
+      <div className="w-full max-w-2xl">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            🧠 Schedule Assistant
+          </h1>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={toggleTheme}
+            className="rounded-full p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
           >
-            Logout
-          </button>
+            {darkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
+          </motion.button>
+        </div>
 
-          <textarea
-            placeholder="Type event description, e.g. 'Call Jack next Thursday at 3pm'"
-            className="w-full p-2 border rounded mb-2"
-            rows={4}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-
-          <button
-            onClick={sendSchedule}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-            disabled={loading}
+        {!tokens ? (
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={loginWithGoogle}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md transition w-full justify-center"
           >
-            {loading ? 'Sending...' : 'Send'}
-          </button>
+            <LogIn className="w-5 h-5" />
+            Login with Google
+          </motion.button>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-4">
+              <button
+                onClick={logout}
+                className="text-sm text-red-500 underline flex items-center gap-1 hover:text-red-600 transition"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
+            </div>
 
-          {error && (
-            <p className="mt-4 text-red-600 whitespace-pre-wrap">{error}</p>
-          )}
-          {response && (
-            <pre className="mt-4 bg-gray-100 p-3 rounded whitespace-pre-wrap">
-              {response}
-            </pre>
-          )}
-        </>
-      )}
+            <textarea
+              placeholder="Type something like: 'Team sync next Friday at 10am'"
+              className="w-full p-4 rounded-xl border dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-base resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition"
+              rows={4}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+            />
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={sendSchedule}
+              className={`mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white transition w-full shadow-lg ${
+                loading ? 'bg-green-400' : 'bg-green-600 hover:bg-green-700'
+              }`}
+              disabled={loading}
+            >
+              <Send className="w-5 h-5" />
+              {loading ? 'Sending...' : 'Send to Calendar'}
+            </motion.button>
+
+            <AnimatePresence>
+              {error && (
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="mt-4 text-red-500 whitespace-pre-wrap text-sm"
+                >
+                  {error}
+                </motion.p>
+              )}
+              {response && (
+                <motion.pre
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="mt-4 bg-zinc-100 dark:bg-zinc-800 p-4 rounded-xl whitespace-pre-wrap text-sm text-zinc-800 dark:text-zinc-100"
+                >
+                  {response}
+                </motion.pre>
+              )}
+            </AnimatePresence>
+          </>
+        )}
+      </div>
+
+      <footer className="mt-10 text-xs text-zinc-500 dark:text-zinc-400">
+        Made by <span className="font-semibold text-black dark:text-white">Vedant & AI</span> 💙
+      </footer>
     </main>
   )
 }
