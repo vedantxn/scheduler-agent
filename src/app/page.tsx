@@ -38,17 +38,18 @@ export default function SchedulePage() {
   }, [searchParams, tokens, router])
 
   // Step 2: On login button click, start OAuth flow
-  const loginWithGoogle = async () => {
-    setError('')
+  async function loginWithGoogle() {
     const res = await fetch('/api/auth/url')
+    if (!res.ok) {
+      console.error('Failed to get auth URL')
+      return
+    }
     const data = await res.json()
     if (data.url) {
       window.location.href = data.url
-    } else {
-      setError('Failed to get auth URL')
     }
   }
-
+  
   // Step 3: Send scheduling request with tokens + input
   const sendSchedule = async () => {
     setError('')
