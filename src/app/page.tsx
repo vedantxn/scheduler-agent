@@ -113,7 +113,7 @@ export default function SchedulePage() {
             </div>
 
             <textarea
-              placeholder="Type something like: 'Team sync next Friday at 10am'"
+              placeholder="Type something like: 'Schedule a call to Mr.Beast on 9pm next suday.'"
               className="w-full p-4 rounded-xl border dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-base resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition"
               rows={4}
               value={input}
