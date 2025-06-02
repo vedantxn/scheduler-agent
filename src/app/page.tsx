@@ -1,18 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+// import { useSearchParams } from 'next/navigation'
 import { Moon, Sun, LogIn, LogOut, Send } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function SchedulePage() {
   const [input, setInput] = useState('')
   const [response, setResponse] = useState('')
-  const [tokens, setTokens] = useState<any>(null)
+  const [tokens, setTokens] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [darkMode, setDarkMode] = useState(true)
-  const searchParams = useSearchParams()
+//  const searchParams = useSearchParams()
 
   useEffect(() => {
     const theme = localStorage.getItem('theme')
