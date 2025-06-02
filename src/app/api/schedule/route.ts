@@ -6,7 +6,7 @@ const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
   apiKey: process.env.OPENROUTER_API_KEY!,
   defaultHeaders: {
-    'HTTP-Referer': 'https://yourdomain.com',
+    'HTTP-Referer': 'https://localhost:3000',
     'X-Title': 'Safetos Schedule Assistant',
   },
 })
@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing input' }, { status: 400 })
     }
 
-    // Read tokens from cookies
     const access_token = req.cookies.get('access_token')?.value
     const refresh_token = req.cookies.get('refresh_token')?.value
 
@@ -26,12 +25,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // TODO: Add token refresh logic if expired here (later step)
-
-    // Set credentials for Google API client
+    // Set Google API credentials
     setCredentials({ access_token, refresh_token })
 
-    // Use OpenAI to parse input
     const today = new Date().toISOString().split('T')[0]
     const prompt = `
 Today is ${today}.
@@ -58,12 +54,24 @@ Return ONLY a JSON like:
     })
 
     const message = completion.choices[0].message?.content || ''
-    const parsed = JSON.parse(message.match(/\{[\s\S]*?\}/)?.[0] || '{}')
+    console.log('AI raw message:', message)
+
+    const jsonString = message.match(/\{[\s\S]*?\}/)?.[0]
+    if (!jsonString) {
+      throw new Error('No JSON found in AI response')
+    }
+
+    const parsed = JSON.parse(jsonString)
+    console.log('Parsed event:', parsed)
+
+    if (!parsed.title || !parsed.datetime) {
+      throw new Error('Parsed event missing title or datetime')
+    }
 
     const eventBody = {
       summary: parsed.title,
       start: { dateTime: parsed.datetime },
-      end: { dateTime: new Date(new Date(parsed.datetime).getTime() + 60 * 60 * 1000).toISOString() },
+      end: { dateTime: new Date(new Date(parsed.datetime).getTime() + 60 * 60 * 1000).toISOString() }, // 1 hour later
     }
 
     const res = await calendar.events.insert({
@@ -73,7 +81,7 @@ Return ONLY a JSON like:
 
     return NextResponse.json({ success: true, event: res.data })
   } catch (err) {
-    console.error('API error:', err)
-    return NextResponse.json({ error: 'Something went wrong' }, { status: 500 })
+    console.error('API error:', (err as Error).message, err)
+    return NextResponse.json({ error: 'Something went wrong', details: (err as Error).message }, { status: 500 })
   }
 }
