@@ -6,7 +6,7 @@ const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
   apiKey: process.env.OPENROUTER_API_KEY!,
   defaultHeaders: {
-    'HTTP-Referer': 'https://localhost:3000',
+    'HTTP-Referer': 'https://scheduler-agent-self.vercel.app',
     'X-Title': 'Safetos Schedule Assistant',
   },
 })
@@ -43,7 +43,7 @@ Return ONLY a JSON like:
 `
 
     const completion = await openai.chat.completions.create({
-      model: 'deepseek/deepseek-r1-0528-qwen3-8b:free',
+      model: 'deepseek/deepseek-r1-0528:free',
       messages: [
         {
           role: 'system',
